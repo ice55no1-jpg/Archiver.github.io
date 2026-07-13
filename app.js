@@ -33,7 +33,7 @@ var FIREBASE_CONFIG = {
   storageBucket: "workforce-manager-14c7a.firebasestorage.app",
   messagingSenderId: "622283071544",
   appId: "1:622283071544:web:f668ff2a2d90fef43d46cd",
-  measurementId: "G-CLZ5R08MB8"
+  /* measurementId: "G-CLZ5R08MB8" */
 };
 /* ▲▲▲ แก้แค่นี้เท่านั้น ▲▲▲ */
 
