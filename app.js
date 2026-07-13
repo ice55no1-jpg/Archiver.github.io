@@ -185,6 +185,11 @@ function initFirebase() {
     console.info('Firebase: ยังไม่ได้ตั้งค่า — ใช้ระบบ download เท่านั้น');
     return;
   }
+  if (typeof firebase === 'undefined') {
+    console.warn('Firebase SDK \u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e42\u0e2b\u0e25\u0e14 \u0e15\u0e23\u0e27\u0e08 internet \u0e2b\u0e23\u0e37\u0e2d CDN');
+    setSyncUI('error');
+    return;
+  }
   try {
     firebaseApp   = firebase.initializeApp(FIREBASE_CONFIG);
     firebaseDb    = firebase.database();
@@ -192,7 +197,7 @@ function initFirebase() {
     setSyncUI('loading');
     loadFromFirebase();
   } catch(e) {
-    console.warn('Firebase init error:', e);
+    console.warn('Firebase init error:', e.message);
     setSyncUI('error');
   }
 }
@@ -270,6 +275,202 @@ function setSyncUI(state) {
     disabled: { cls:'sync-disabled', icon:'\u2601\ufe0f',       label:'\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49\u0e40\u0e0a\u0e37\u0e48\u0e2d\u0e21\u0e15\u0e48\u0e2d' },
     loading:  { cls:'sync-loading',  icon:'\ud83d\udd04',       label:'\u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14...' },
     pending:  { cls:'sync-pending',  icon:'\u23f3',              label:'\u0e23\u0e2d sync...' },
+    saving:   { cls:'sync-saving',   icon:'\ud83d\udd04',       label:'\u0e01\u0e33\u0e25\u0e31\u0e07 sync...' },
+    ok:       { cls:'sync-ok',       icon:'\u2601\ufe0f\u2714',label:'Synced' },
+    error:    { cls:'sync-err',      icon:'\u2601\ufe0f\u2717',label:'Offline' }
+  };
+  var s = S[state] || S.disabled;
+  el.className = 'sync-status ' + s.cls;
+  var iconEl  = el.querySelector('.sync-icon');
+  var labelEl = el.querySelector('.sync-label');
+  if (iconEl)  iconEl.textContent  = s.icon;
+  if (labelEl) labelEl.textContent = s.label;
+}
+
+
+
+/* ════ SAVE & DOWNLOAD ═════════════════════════════════ */
+function saveAndDownload() {
+  if (!employees.length && !missions.length && !items.length && !attendanceDays.length) {
+    showToast('\u26a0 \u0e44\u0e21\u0e48\u0e21\u0e35\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e43\u0e2b\u0e49\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01'); return;
+  }
+  var payload = JSON.stringify({
+    version: 4, empIdSeq: empIdSeq, jobIdSeq: jobIdSeq,
+    dayIdSeq: dayIdSeq, itemIdSeq: itemIdSeq,
+    employees: employees, missions: missions,
+    attendanceDays: attendanceDays, items: items
+  });
+
+  function injectData(html) {
+    return html.replace(
+      /(<script[^>]+id="wm-data"[^>]*>)([\s\S]*?)(<\/script>)/,
+      function(_m, open, _old, close) { return open + '\n' + payload + '\n' + close; }
+    );
+  }
+  function triggerDownload(content) {
+    var blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    var ts   = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+    a.href = url;
+    a.download = 'workforce_' + ts + '.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    markClean();
+    showToast('\ud83d\udcbe \u0e14\u0e32\u0e27\u0e19\u0e4c\u0e42\u0e2b\u0e25\u0e14\u0e44\u0e1f\u0e25\u0e4c\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08!');
+  }
+
+  var inlineCss = document.getElementById('main-css');
+  var inlineJs  = document.getElementById('main-js');
+
+  if (inlineCss && inlineJs) {
+    triggerDownload(injectData(document.documentElement.outerHTML));
+    return;
+  }
+
+  Promise.all([fetch('index.html'), fetch('style.css'), fetch('app.js')])
+    .then(function(res) { return Promise.all(res.map(function(r) { return r.text(); })); })
+    .then(function(texts) {
+      var bundled = texts[0]
+        .replace('<link rel="stylesheet" href="style.css">', '<style id="main-css">\n' + texts[1] + '\n</style>')
+        .replace('<script src="app.js"></script>', '<script id="main-js">\n' + texts[2] + '\n</script>');
+      triggerDownload(injectData(bundled));
+    })
+    .catch(function() {
+      showToast('\u26a0 \u0e44\u0e21\u0e48\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e42\u0e2b\u0e25\u0e14\u0e44\u0e14\u0e49 \u0e25\u0e2d\u0e07\u0e43\u0e2b\u0e21\u0e48');
+    });
+}
+
+function openImportModal() {
+  pendingImport = null;
+  document.getElementById('import-result').className = 'import-result';
+  document.getElementById('import-result').innerHTML = '';
+  document.getElementById('import-confirm-btn').style.display = 'none';
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('import-mode').className = 'import-mode';
+  const radios = document.getElementsByName('import-mode-radio');
+  for (let i = 0; i < radios.length; i++) radios[i].checked = (radios[i].value === 'merge');
+  openModal('import-modal');
+}
+function onDragOver(e)  { e.preventDefault(); document.getElementById('import-drop').classList.add('drag-over'); }
+function onDragLeave(e) { document.getElementById('import-drop').classList.remove('drag-over'); }
+function onDrop(e)      { e.preventDefault(); onDragLeave(e); readImportFile(e.dataTransfer.files[0]); }
+
+function readImportFile(file) {
+  if (!file) return;
+  if (!file.name.endsWith('.html')) { showToast('\u26a0 \u0e40\u0e25\u0e37\u0e2d\u0e01\u0e40\u0e09\u0e1e\u0e32\u0e30\u0e44\u0e1f\u0e25\u0e4c .html'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) { parseImportedHTML(e.target.result); };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseImportedHTML(html) {
+  const resultEl = document.getElementById('import-result');
+  const btnEl    = document.getElementById('import-confirm-btn');
+  let importedEmps = [], importedJobs = [], importedDays = [], importedItems = [];
+  let log = [];
+
+  const v2match = html.match(/<script[^>]+id="wm-data"[^>]*>([\s\S]*?)<\/script>/);
+  if (v2match) {
+    try {
+      const d = JSON.parse(v2match[1].trim());
+      const migrated = migrateData(d);
+      importedEmps = migrated.employees;
+      importedJobs = migrated.missions;
+      importedDays = migrated.attendanceDays;
+      importedItems = migrated.items;
+      log.push('<span class="import-ok">\u2714 \u0e15\u0e23\u0e27\u0e08\u0e1e\u0e1a\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a v' + (d.version ?? 2) + ' (JSON data tag)</span>');
+    } catch(err) {
+      log.push('<span class="import-err">\u2715 \u0e2d\u0e48\u0e32\u0e19 JSON \u0e44\u0e21\u0e48\u0e44\u0e14\u0e49: ' + err.message + '</span>');
+    }
+  }
+
+  if (!importedEmps.length && !importedJobs.length) {
+    const empMatch = html.match(/\/\*EMPLOYEES_DATA\*\/([\s\S]*?)\/\*END\*\//);
+    const jobMatch = html.match(/\/\*MISSIONS_DATA\*\/([\s\S]*?)\/\*END\*\//);
+    if (empMatch || jobMatch) {
+      log.push('<span class="import-ok">\u2714 \u0e15\u0e23\u0e27\u0e08\u0e1e\u0e1a\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a v1 (comment-injected)</span>');
+      try { importedEmps = JSON.parse(empMatch ? empMatch[1] : '[]'); } catch(e) { importedEmps = []; }
+      try { importedJobs = JSON.parse(jobMatch ? jobMatch[1] : '[]'); } catch(e) { importedJobs = []; }
+      importedEmps = importedEmps.map(migrateEmployee);
+      importedJobs = importedJobs.map(migrateMission);
+    }
+  }
+
+  if (!importedEmps.length && !importedJobs.length && !importedDays.length && !importedItems.length) {
+    log.push('<span class="import-err">\u2715 \u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e43\u0e19\u0e44\u0e1f\u0e25\u0e4c\u0e19\u0e35\u0e49</span>');
+    pendingImport = null;
+    btnEl.style.display = 'none';
+    document.getElementById('import-mode').className = 'import-mode';
+  } else {
+    log.push('<span class="import-ok">\ud83d\udc65 \u0e1e\u0e1a\u0e1e\u0e19\u0e31\u0e01\u0e07\u0e32\u0e19: ' + importedEmps.length + ' \u0e04\u0e19</span>');
+    log.push('<span class="import-ok">\ud83d\udccb \u0e1e\u0e1a\u0e07\u0e32\u0e19: ' + importedJobs.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</span>');
+    if (importedDays.length) {
+      log.push('<span class="import-ok">\ud83d\udcc5 \u0e1e\u0e1a\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e0a\u0e47\u0e04\u0e0a\u0e37\u0e48\u0e2d: ' + importedDays.length + ' \u0e27\u0e31\u0e19</span>');
+    }
+    if (importedItems.length) {
+      log.push('<span class="import-ok">\u2b50 \u0e1e\u0e1a Items: ' + importedItems.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</span>');
+    }
+    pendingImport = { employees: importedEmps, missions: importedJobs, attendanceDays: importedDays, items: importedItems };
+    btnEl.style.display = '';
+    document.getElementById('import-mode').className = 'import-mode show';
+  }
+
+  resultEl.innerHTML = log.join('<br>');
+  resultEl.className = 'import-result show';
+}
+
+function getSelectedImportMode() {
+  const radios = document.getElementsByName('import-mode-radio');
+  for (let i = 0; i < radios.length; i++) {
+    if (radios[i].checked) return radios[i].value;
+  }
+  return 'merge';
+}
+
+function applyImport() {
+  if (!pendingImport) return;
+  const mode = getSelectedImportMode();
+  if (mode === 'replace') {
+    showConfirm(
+      '\u0e41\u0e17\u0e19\u0e17\u0e35\u0e48\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14?',
+      '\u0e1e\u0e19\u0e31\u0e01\u0e07\u0e32\u0e19\u0e41\u0e25\u0e30\u0e07\u0e32\u0e19\u0e17\u0e35\u0e48\u0e21\u0e35\u0e2d\u0e22\u0e39\u0e48\u0e15\u0e2d\u0e19\u0e19\u0e35\u0e49\u0e08\u0e30\u0e16\u0e39\u0e01\u0e25\u0e1a\u0e2d\u0e2d\u0e01\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14 \u0e41\u0e25\u0e49\u0e27\u0e41\u0e17\u0e19\u0e17\u0e35\u0e48\u0e14\u0e49\u0e27\u0e22\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e08\u0e32\u0e01\u0e44\u0e1f\u0e25\u0e4c\u0e17\u0e35\u0e48\u0e19\u0e33\u0e40\u0e02\u0e49\u0e32 \u0e01\u0e32\u0e23\u0e01\u0e23\u0e30\u0e17\u0e33\u0e19\u0e35\u0e49\u0e44\u0e21\u0e48\u0e2a\u0e32\u0e21\u0e32\u0e23\u0e16\u0e22\u0e49\u0e2d\u0e19\u0e01\u0e25\u0e31\u0e1a\u0e44\u0e14\u0e49',
+      '\u26a0 \u0e41\u0e17\u0e19\u0e17\u0e35\u0e48\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14',
+      function() { doReplaceImport(); }
+    );
+  } else {
+    doMergeImport();
+  }
+}
+
+function performImportData(impEmps, impJobs, impDays, impItems) {
+  const empIdMap  = {};
+  const dayIdMap  = {};
+  const itemIdMap = {};
+
+  const newDays = (impDays || []).map(function(d) {
+    const newId = ++dayIdSeq;
+    dayIdMap[d.id] = newId;
+    return { id: newId, date: d.date };
+  });
+
+  const newItems = (impItems || []).map(function(it) {
+    const newId = ++itemIdSeq;
+    itemIdMap[it.id] = newId;
+    return Object.assign({}, it, { id: newId, jobId: null, jobName: null, status: it.status === 'in-use' ? 'available' : (it.status || 'available') });
+  });
+
+  const newEmps = (impEmps || []).map(function(e) {
+    const newId = ++empIdSeq;
+    empIdMap[e.id] = newId;
+    const oldAttendance = e.attendance || {};
+    const newAttendance = {};
+    Object.keys(oldAttendance).forEach(function(oldDayId) {
+      const mappedId = dayIdMap[oldDayId];
+      if (mappedId) newAttendance[mappedId] = oldAttendance[oldDayId];
+    });
+    return Object.assign({}, e, { id: newId, jobId: null, jobName: null, attendance: newAttendance });
+     pending:  { cls:'sync-pending',  icon:'\u23f3',              label:'\u0e23\u0e2d sync...' },
     saving:   { cls:'sync-saving',   icon:'\ud83d\udd04',       label:'\u0e01\u0e33\u0e25\u0e31\u0e07 sync...' },
     ok:       { cls:'sync-ok',       icon:'\u2601\ufe0f\u2714',label:'Synced' },
     error:    { cls:'sync-err',      icon:'\u2601\ufe0f\u2717',label:'Offline' }
