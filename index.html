@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workforce Manager</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!--
+    DATA STORE — injected by saveAndDownload() on every save.
+    Schema v4: { version, empIdSeq, jobIdSeq, dayIdSeq, itemIdSeq,
+                 employees[], missions[], attendanceDays[], items[] }
+  -->
+  <script type="application/json" id="wm-data">
+{"version":2,"empIdSeq":0,"jobIdSeq":0,"employees":[],"missions":[]}
+  </script>
+</head>
+<body>
+
+<header>
+  <span class="header-icon">&#9876;&#65039;</span>
+  <div class="header-title">
+    <h1>WORKFORCE MANAGER</h1>
+    <div class="header-sub">Character Roster &amp; Mission Board</div>
+  </div>
+  <div class="header-actions">
+    <div class="save-status">
+      <span class="save-dot unsaved" id="save-dot"></span>
+      <span class="save-label" id="save-label">&#3618;&#3633;&#3591;&#3652;&#3617;&#3656;&#3652;&#3604;&#3657;&#3610;&#3633;&#3609;&#3607;&#3638;&#3585;</span>
+    </div>
+    <div class="sync-status sync-disabled" id="sync-status" title="Firebase Auto-Save">
+      <span class="sync-icon">&#9729;&#65039;</span>
+      <span class="sync-label" id="sync-label">ไม่ได้เชื่อมต่อ</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openImportModal()">&#128229; &#3609;&#3635;&#3648;&#3586;&#3657;&#3634;&#3652;&#3615;&#3621;&#3660;&#3648;&#3585;&#3656;&#3634;</button>
+    <button class="btn btn-green" onclick="saveAndDownload()">&#128190; &#3610;&#3633;&#3609;&#3607;&#3638;&#3585;&#3652;&#3615;&#3621;&#3660; (Backup)</button>
+  </div>
+</header>
+
+<div class="app">
+  <section class="section">
+    <div class="section-header">
+      <span class="section-badge badge-roster">ROSTER</span>
+      <span class="section-title">&#3588;&#3621;&#3633;&#3591;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</span>
+      <span class="section-count" id="roster-count">0 &#3588;&#3609;</span>
+    </div>
+    <div class="add-panel">
+      <div class="add-panel-title">&#10133; &#3648;&#3614;&#3636;&#3656;&#3617;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;&#3651;&#3627;&#3617;&#3656;</div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3594;&#3639;&#3656;&#3629;-&#3609;&#3634;&#3617;&#3626;&#3585;&#3640;&#3621; *</label>
+          <input type="text" id="emp-name" placeholder="&#3648;&#3594;&#3656;&#3609; &#3626;&#3617;&#3594;&#3634;&#3618; &#3651;&#3592;&#3604;&#3637;">
+        </div>
+        <div class="form-field">
+          <label>&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;</label>
+          <input type="text" id="emp-note" placeholder="&#3648;&#3594;&#3656;&#3609; &#3612;&#3641;&#3657;&#3648;&#3594;&#3637;&#3656;&#3618;&#3623;&#3594;&#3634;&#3597;&#3604;&#3657;&#3634;&#3609;...">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3619;&#3641;&#3611;&#3616;&#3634;&#3614;</label>
+          <div class="img-upload-area" onclick="document.getElementById('emp-img-input').click()">
+            <input type="file" id="emp-img-input" accept="image/*" onchange="previewImg(this,'emp-add-prev','emp-add-ph')" style="display:none">
+            <img id="emp-add-prev" class="upload-preview">
+            <div id="emp-add-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">&#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3629;&#3633;&#3611;&#3650;&#3627;&#3621;&#3604;</div></div>
+          </div>
+        </div>
+        <div class="form-field" style="justify-content:flex-end">
+          <button class="btn btn-gold" onclick="addEmployee()" style="width:100%">&#10022; &#3648;&#3614;&#3636;&#3656;&#3617;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</button>
+        </div>
+      </div>
+    </div>
+    <div class="cards-grid" id="emp-grid">
+      <div class="empty-state" id="emp-empty" style="grid-column:1/-1">
+        <div class="empty-state-icon">&#128101;</div>
+        <div class="empty-state-text">&#3618;&#3633;&#3591;&#3652;&#3617;&#3656;&#3617;&#3637;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;<br>&#3648;&#3614;&#3636;&#3656;&#3617;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;&#3588;&#3609;&#3649;&#3619;&#3585;&#3604;&#3657;&#3634;&#3609;&#3610;&#3609;</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <span class="section-badge badge-mission">MISSIONS</span>
+      <span class="section-title">&#3619;&#3634;&#3618;&#3585;&#3634;&#3619;&#3591;&#3634;&#3609;</span>
+      <span class="section-count" id="mission-count">0 &#3591;&#3634;&#3609;</span>
+    </div>
+    <div class="add-panel">
+      <div class="add-panel-title">&#10133; &#3626;&#3619;&#3657;&#3634;&#3591;&#3591;&#3634;&#3609;&#3651;&#3627;&#3617;&#3656;</div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3594;&#3639;&#3656;&#3629;&#3591;&#3634;&#3609; *</label>
+          <input type="text" id="job-name" placeholder="&#3648;&#3594;&#3656;&#3609; &#3629;&#3629;&#3585;&#3649;&#3610;&#3610;&#3650;&#3621;&#3650;&#3585;&#3657;">
+        </div>
+        <div class="form-field">
+          <label>&#3592;&#3635;&#3609;&#3623;&#3609;&#3588;&#3609;&#3607;&#3637;&#3656;&#3605;&#3657;&#3629;&#3591;&#3651;&#3594;&#3657; *</label>
+          <input type="number" id="job-count" placeholder="&#3648;&#3594;&#3656;&#3609; 3" min="1">
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="form-field">
+          <label>&#3619;&#3634;&#3618;&#3621;&#3632;&#3648;&#3629;&#3637;&#3618;&#3604;&#3591;&#3634;&#3609;</label>
+          <textarea id="job-desc" placeholder="&#3629;&#3608;&#3636;&#3610;&#3634;&#3618;&#3619;&#3634;&#3618;&#3621;&#3632;&#3648;&#3629;&#3637;&#3618;&#3604;&#3591;&#3634;&#3609;..."></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;</label>
+          <input type="text" id="job-note" placeholder="&#3648;&#3594;&#3656;&#3609; &#3604;&#3656;&#3623;&#3609;, &#3605;&#3657;&#3629;&#3591;&#3651;&#3594;&#3657;&#3607;&#3633;&#3585;&#3625;&#3632;...">
+        </div>
+        <div class="form-field">
+          <label>&#3619;&#3641;&#3611;&#3616;&#3634;&#3614;&#3591;&#3634;&#3609;</label>
+          <div class="img-upload-area" onclick="document.getElementById('job-img-input').click()">
+            <input type="file" id="job-img-input" accept="image/*" onchange="previewImg(this,'job-add-prev','job-add-ph')" style="display:none">
+            <img id="job-add-prev" class="upload-preview">
+            <div id="job-add-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">&#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3629;&#3633;&#3611;&#3650;&#3627;&#3621;&#3604;</div></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addMission()">&#9889; &#3626;&#3619;&#3657;&#3634;&#3591;&#3591;&#3634;&#3609;</button>
+    </div>
+    <div class="missions-list" id="mission-list">
+      <div class="empty-state" id="mission-empty">
+        <div class="empty-state-icon">&#128203;</div>
+        <div class="empty-state-text">&#3618;&#3633;&#3591;&#3652;&#3617;&#3656;&#3617;&#3637;&#3619;&#3634;&#3618;&#3585;&#3634;&#3619;&#3591;&#3634;&#3609;<br>&#3626;&#3619;&#3657;&#3634;&#3591;&#3591;&#3634;&#3609;&#3649;&#3619;&#3585;&#3604;&#3657;&#3634;&#3609;&#3610;&#3609;</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-header">
+      <span class="section-badge badge-attendance">ATTENDANCE</span>
+      <span class="section-title">&#3648;&#3594;&#3655;&#3588;&#3594;&#3639;&#3656;&#3629;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</span>
+      <span class="section-count" id="attendance-day-count">0 &#3623;&#3633;&#3609;</span>
+    </div>
+
+    <div class="swipe-machine">
+      <div class="swipe-header">
+        <span class="swipe-header-icon">&#128179;</span>
+        <span class="swipe-header-title">&#3648;&#3588;&#3619;&#3639;&#3656;&#3629;&#3591;&#3619;&#3641;&#3604;&#3610;&#3633;&#3605;&#3619;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</span>
+      </div>
+      <div class="swipe-controls">
+        <div class="form-field">
+          <label>&#3648;&#3621;&#3639;&#3629;&#3585;&#3623;&#3633;&#3609;&#3607;&#3637;&#3656;</label>
+          <select id="swipe-day-select" onchange="onSwipeDayChange()">
+            <option value="">-- &#3648;&#3621;&#3639;&#3629;&#3585;&#3623;&#3633;&#3609;&#3607;&#3637;&#3656; --</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>&#3648;&#3621;&#3639;&#3629;&#3585;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</label>
+          <select id="swipe-emp-select" onchange="onSwipeEmpChange()">
+            <option value="">-- &#3648;&#3621;&#3639;&#3629;&#3585;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609; --</option>
+          </select>
+        </div>
+      </div>
+      <div class="swipe-device">
+        <div class="swipe-screen">
+          <div class="swipe-date" id="swipe-date-display">-- &#3648;&#3621;&#3639;&#3629;&#3585;&#3623;&#3633;&#3609;&#3607;&#3637;&#3656; --</div>
+          <div class="swipe-time" id="swipe-time-display">--:--:--</div>
+        </div>
+        <div class="swipe-slot-wrap">
+          <div class="swipe-card" id="swipe-card">
+            <div class="swipe-card-avatar" id="swipe-card-avatar">&#128100;</div>
+            <div class="swipe-card-name" id="swipe-card-name">&#3648;&#3621;&#3639;&#3629;&#3585;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</div>
+          </div>
+          <div class="swipe-slot"></div>
+          <span class="swipe-light" id="swipe-light"></span>
+        </div>
+        <button class="btn btn-cyan-glow" onclick="performSwipe()">&#128179; &#3619;&#3641;&#3604;&#3610;&#3633;&#3605;&#3619;</button>
+      </div>
+    </div>
+
+    <div class="attendance-toolbar">
+      <button class="btn btn-primary btn-sm" onclick="openAddDayModal()">&#10133; &#3648;&#3614;&#3636;&#3656;&#3617;&#3623;&#3633;&#3609;&#3607;&#3637;&#3656;</button>
+    </div>
+    <div class="attendance-table-wrap" id="attendance-table-wrap"></div>
+
+  <section class="section">
+    <div class="section-header">
+      <span class="section-badge badge-items">ITEMS</span>
+      <span class="section-title">คลัง Item</span>
+      <span class="section-count" id="items-count">0 รายการ</span>
+    </div>
+    <div class="add-panel">
+      <div class="add-panel-title">&#10133; เพิ่ม Item ใหม่</div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>ชื่อ Item *</label>
+          <input type="text" id="item-name" placeholder="เช่น ค้อนไม้, มีด...">
+        </div>
+        <div class="form-field">
+          <label>สถานะเริ่มต้น</label>
+          <select id="item-init-status">
+            <option value="available">✅ ว่าง</option>
+            <option value="damaged">&#128308; เสียหาย</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="form-field">
+          <label>คำอธิบาย</label>
+          <textarea id="item-desc" placeholder="อธิบายรายละเอียด..."></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>หมายเหตุ</label>
+          <input type="text" id="item-note" placeholder="หมายเหตุ...">
+        </div>
+        <div class="form-field">
+          <label>รูปภาพ</label>
+          <div class="img-upload-area" onclick="document.getElementById('item-img-input').click()">
+            <input type="file" id="item-img-input" accept="image/*" onchange="previewImg(this,'item-add-prev','item-add-ph')" style="display:none">
+            <img id="item-add-prev" class="upload-preview">
+            <div id="item-add-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">คลิกเพื่ออัปโหลด</div></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-purple" onclick="addItem()">&#9733; เพิ่ม Item</button>
+    </div>
+    <div class="cards-grid" id="items-grid">
+      <div class="empty-state" id="items-empty" style="grid-column:1/-1">
+        <div class="empty-state-icon">&#127775;</div>
+        <div class="empty-state-text">ยังไม่มี Item ในคลัง<br>เพิ่ม Item แรกด้านบน</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal-overlay" id="edit-emp-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#9999;&#65039;</span>
+      <h3>&#3649;&#3585;&#3657;&#3652;&#3586;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;</h3>
+      <button class="modal-close" onclick="closeModal('edit-emp-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-emp-id">
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3594;&#3639;&#3656;&#3629;-&#3609;&#3634;&#3617;&#3626;&#3585;&#3640;&#3621; *</label>
+          <input type="text" id="edit-emp-name" placeholder="&#3594;&#3639;&#3656;&#3629;&#3614;&#3609;&#3633;&#3585;&#3591;&#3634;&#3609;">
+        </div>
+        <div class="form-field">
+          <label>&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;</label>
+          <input type="text" id="edit-emp-note" placeholder="&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;">
+        </div>
+      </div>
+      <div class="form-field">
+        <label>&#3619;&#3641;&#3611;&#3616;&#3634;&#3614;</label>
+        <img id="edit-emp-cur-img" class="current-img-thumb" alt="current">
+        <div class="img-upload-area" onclick="document.getElementById('edit-emp-img-input').click()">
+          <input type="file" id="edit-emp-img-input" accept="image/*" onchange="previewImg(this,'edit-emp-prev','edit-emp-ph')">
+          <img id="edit-emp-prev" class="upload-preview">
+          <div id="edit-emp-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">&#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3648;&#3611;&#3621;&#3637;&#3656;&#3618;&#3609;&#3619;&#3641;&#3611; (&#3652;&#3617;&#3656;&#3648;&#3621;&#3639;&#3629;&#3585; = &#3588;&#3591;&#3648;&#3604;&#3636;&#3617;)</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('edit-emp-modal')">&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn btn-primary" onclick="saveEditEmployee()">&#128190; &#3610;&#3633;&#3609;&#3607;&#3638;&#3585;&#3585;&#3634;&#3619;&#3649;&#3585;&#3657;&#3652;&#3586;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-job-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#9999;&#65039;</span>
+      <h3>&#3649;&#3585;&#3657;&#3652;&#3586;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3591;&#3634;&#3609;</h3>
+      <button class="modal-close" onclick="closeModal('edit-job-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-job-id">
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3594;&#3639;&#3656;&#3629;&#3591;&#3634;&#3609; *</label>
+          <input type="text" id="edit-job-name" placeholder="&#3594;&#3639;&#3656;&#3629;&#3591;&#3634;&#3609;">
+        </div>
+        <div class="form-field">
+          <label>&#3592;&#3635;&#3609;&#3623;&#3609;&#3588;&#3609;&#3607;&#3637;&#3656;&#3605;&#3657;&#3629;&#3591;&#3651;&#3594;&#3657; *</label>
+          <input type="number" id="edit-job-count" min="1" placeholder="&#3592;&#3635;&#3609;&#3623;&#3609;&#3588;&#3609;">
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="form-field">
+          <label>&#3619;&#3634;&#3618;&#3621;&#3632;&#3648;&#3629;&#3637;&#3618;&#3604;&#3591;&#3634;&#3609;</label>
+          <textarea id="edit-job-desc" placeholder="&#3619;&#3634;&#3618;&#3621;&#3632;&#3648;&#3629;&#3637;&#3618;&#3604;..."></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;</label>
+          <input type="text" id="edit-job-note" placeholder="&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;">
+        </div>
+        <div class="form-field">
+          <label>&#3619;&#3641;&#3611;&#3616;&#3634;&#3614;&#3591;&#3634;&#3609;</label>
+          <img id="edit-job-cur-img" class="current-img-thumb" alt="current">
+          <div class="img-upload-area" onclick="document.getElementById('edit-job-img-input').click()">
+            <input type="file" id="edit-job-img-input" accept="image/*" onchange="previewImg(this,'edit-job-prev','edit-job-ph')">
+            <img id="edit-job-prev" class="upload-preview">
+            <div id="edit-job-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">&#3588;&#3621;&#3636;&#3585;&#3648;&#3614;&#3639;&#3656;&#3629;&#3648;&#3611;&#3621;&#3637;&#3656;&#3618;&#3609;&#3619;&#3641;&#3611; (&#3652;&#3617;&#3656;&#3648;&#3621;&#3639;&#3629;&#3585; = &#3588;&#3591;&#3648;&#3604;&#3636;&#3617;)</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('edit-job-modal')">&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn btn-primary" onclick="saveEditMission()">&#128190; &#3610;&#3633;&#3609;&#3607;&#3638;&#3585;&#3585;&#3634;&#3619;&#3649;&#3585;&#3657;&#3652;&#3586;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="add-day-modal">
+  <div class="modal-box" style="max-width:380px">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#128197;</span>
+      <h3>&#3648;&#3614;&#3636;&#3656;&#3617;&#3623;&#3633;&#3609;&#3607;&#3637;&#3656;&#3648;&#3594;&#3655;&#3588;&#3594;&#3639;&#3656;&#3629;</h3>
+      <button class="modal-close" onclick="closeModal('add-day-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field">
+        <label>&#3623;&#3633;&#3609;&#3607;&#3637;&#3656; *</label>
+        <input type="date" id="new-day-date">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-day-modal')">&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn btn-primary" onclick="saveNewDay()">&#10133; &#3648;&#3614;&#3636;&#3656;&#3617;&#3588;&#3629;&#3621;&#3633;&#3617;&#3609;&#3660;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="attendance-detail-modal">
+  <div class="modal-box" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#128179;</span>
+      <h3>&#3619;&#3634;&#3618;&#3621;&#3632;&#3648;&#3629;&#3637;&#3618;&#3604;&#3585;&#3634;&#3619;&#3648;&#3594;&#3655;&#3588;&#3594;&#3639;&#3656;&#3629;</h3>
+      <button class="modal-close" onclick="closeModal('attendance-detail-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="att-detail-emp-id">
+      <input type="hidden" id="att-detail-day-id">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px" id="att-detail-subtitle"></div>
+      <div class="att-status-toggle">
+        <label class="att-status-option">
+          <input type="radio" name="att-status-radio" value="present" onchange="onAttStatusChange()">
+          <div class="att-status-card present">&#9989; &#3617;&#3634;&#3607;&#3635;&#3591;&#3634;&#3609;</div>
+        </label>
+        <label class="att-status-option">
+          <input type="radio" name="att-status-radio" value="absent" onchange="onAttStatusChange()">
+          <div class="att-status-card absent">&#10060; &#3652;&#3617;&#3656;&#3617;&#3634;</div>
+        </label>
+      </div>
+      <div class="form-row" id="att-present-fields">
+        <div class="form-field">
+          <label>&#3648;&#3623;&#3621;&#3634;&#3619;&#3641;&#3604;&#3610;&#3633;&#3605;&#3619;</label>
+          <input type="text" id="att-detail-time" placeholder="HH:MM">
+        </div>
+        <div class="form-field">
+          <label>&#3591;&#3634;&#3609;&#3607;&#3637;&#3656;&#3607;&#3635;</label>
+          <input type="text" id="att-detail-job" placeholder="&#3623;&#3656;&#3634;&#3591;&#3591;&#3634;&#3609;">
+        </div>
+      </div>
+      <div class="form-field">
+        <label>&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;</label>
+        <textarea id="att-detail-note" placeholder="&#3627;&#3617;&#3634;&#3618;&#3648;&#3627;&#3605;&#3640;..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('attendance-detail-modal')">&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn btn-primary" onclick="saveAttendanceDetail()">&#128190; &#3610;&#3633;&#3609;&#3607;&#3638;&#3585;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-item-modal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#9999;&#65039;</span>
+      <h3>แก้ไขข้อมูล Item</h3>
+      <button class="modal-close" onclick="closeModal('edit-item-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-item-id">
+      <div class="form-row">
+        <div class="form-field">
+          <label>ชื่อ Item *</label>
+          <input type="text" id="edit-item-name" placeholder="ชื่อ Item">
+        </div>
+        <div class="form-field">
+          <label>สถานะ</label>
+          <select id="edit-item-status">
+            <option value="available">✅ ว่าง</option>
+            <option value="in-use">&#128993; ถูกใช้</option>
+            <option value="damaged">&#128308; เสียหาย</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="form-field">
+          <label>คำอธิบาย</label>
+          <textarea id="edit-item-desc" placeholder="คำอธิบาย..."></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>หมายเหตุ</label>
+          <input type="text" id="edit-item-note" placeholder="หมายเหตุ">
+        </div>
+        <div class="form-field">
+          <label>รูปภาพ</label>
+          <img id="edit-item-cur-img" class="current-img-thumb" alt="current">
+          <div class="img-upload-area" onclick="document.getElementById('edit-item-img-input').click()">
+            <input type="file" id="edit-item-img-input" accept="image/*" onchange="previewImg(this,'edit-item-prev','edit-item-ph')">
+            <img id="edit-item-prev" class="upload-preview">
+            <div id="edit-item-ph"><div class="upload-icon">&#128444;&#65039;</div><div class="upload-text">คลิกเพื่อเปลี่ยนรูป (ไม่เลือก = คงเดิม)</div></div>
+          </div>
+        </div>
+      </div>
+      <div id="edit-item-job-info" style="display:none;font-size:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;color:var(--gold);margin-top:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('edit-item-modal')">&#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn btn-danger btn-sm" id="edit-item-unassign-btn" style="display:none;margin-right:auto" onclick="unassignItemFromJob()">&#10006; นำออกจากงาน</button>
+      <button class="btn btn-primary" onclick="saveEditItem()">&#128190; บันทึกการแก้ไข</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box" style="max-width:380px;border-top:3px solid var(--red)">
+    <div class="modal-body" style="padding:24px 24px 0;text-align:center">
+      <div style="font-size:34px;margin-bottom:10px" id="confirm-icon">&#9888;&#65039;</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:8px" id="confirm-title">&#3618;&#3639;&#3609;&#3618;&#3633;&#3609;&#3585;&#3634;&#3619;&#3621;&#3610;</div>
+      <div style="font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:20px" id="confirm-body">&#3588;&#3640;&#3603;&#3649;&#3609;&#3656;&#3651;&#3592;&#3627;&#3619;&#3639;&#3629;&#3652;&#3617;&#3656;?</div>
+    </div>
+    <div class="modal-footer" style="justify-content:center;padding-bottom:24px">
+      <button class="btn btn-ghost" onclick="closeModal('confirm-modal')">&#8617; &#3618;&#3585;&#3648;&#3621;&#3636;&#3585;</button>
+      <button class="btn" id="confirm-ok-btn" style="background:linear-gradient(135deg,var(--red),#BE123C);color:#fff" onclick="runConfirm()">&#3618;&#3639;&#3609;&#3618;&#3633;&#3609;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="import-modal">
+  <div class="modal-box" style="max-width:460px;border-top:3px solid var(--purple)">
+    <div class="modal-header">
+      <span class="modal-header-icon">&#128229;</span>
+      <h3>&#3609;&#3635;&#3648;&#3586;&#3657;&#3634;&#3652;&#3615;&#3621;&#3660;&#3648;&#3585;&#3656;&#3634;</h3>
+      <button class="modal-close" onclick="closeModal('import-modal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="import-drop" id="import-drop"
+           onclick="document.getElementById('import-file-input').click()"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <input type="file" id="import-file-input" accept=".html" style="display:none" onchange="readImportFile(this.files[0])">
+        <div class="import-drop-icon">&#128194;</div>
+        <div class="import-drop-text">&#3588;&#3621;&#3636;&#3585;&#3627;&#3619;&#3639;&#3629;&#3621;&#3634;&#3585; <strong>.html</strong> &#3652;&#3615;&#3621;&#3660;&#3648;&#3623;&#3629;&#3619;&#3660;&#3594;&#3633;&#3609;&#3648;&#3585;&#3656;&#3634;&#3617;&#3634;&#3623;&#3634;&#3591;&#3607;&#3637;&#3656;&#3609;&#3637;&#3656;</div>
+      </div>
+      <div class="import-result" id="import-result"></div>
+      <div class="import-mode" id="import-mode">
+        <label class="import-mode-option">
+          <input type="radio" name="import-mode-radio" value="merge" checked>
+          <div class="import-mode-card">
+            <div class="import-mode-icon">&#10133;</div>
+            <div class="import-mode-title">&#3619;&#3623;&#3617; (Merge)</div>
+            <div class="import-mode-desc">&#3648;&#3614;&#3636;&#3656;&#3617;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3651;&#3627;&#3617;&#3656;&#3648;&#3586;&#3657;&#3634;&#3652;&#3611; &#3652;&#3617;&#3656;&#3621;&#3610;&#3586;&#3629;&#3591;&#3648;&#3604;&#3636;&#3617;</div>
+          </div>
+        </label>
+        <label class="import-mode-option">
+          <input type="radio" name="import-mode-radio" value="replace">
+          <div class="import-mode-card">
+            <div class="import-mode-icon">&#9888;&#65039;</div>
+            <div class="import-mode-title">&#3649;&#3607;&#3609;&#3607;&#3637;&#3656; (Replace)</div>
+            <div class="import-mode-desc">&#3621;&#3610;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3648;&#3604;&#3636;&#3617;&#3607;&#3633;&#3657;&#3591;&#3627;&#3617;&#3604; &#3649;&#3621;&#3657;&#3623;&#3651;&#3625;&#3656;&#3604;&#3657;&#3623;&#3618;&#3652;&#3615;&#3621;&#3660;&#3651;&#3627;&#3617;&#3656;</div>
+          </div>
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.7;margin-top:10px" id="import-warning-note">
+        &#9888; &#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3611;&#3633;&#3592;&#3592;&#3640;&#3610;&#3633;&#3609;&#3592;&#3632;&#3606;&#3641;&#3585;<strong>&#3619;&#3623;&#3617;</strong>&#3585;&#3633;&#3610;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3592;&#3634;&#3585;&#3652;&#3615;&#3621;&#3660;&#3607;&#3637;&#3656;&#3609;&#3635;&#3648;&#3586;&#3657;&#3634; (&#3652;&#3617;&#3656;&#3621;&#3610;&#3586;&#3629;&#3591;&#3648;&#3604;&#3636;&#3617;)
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('import-modal')">&#3611;&#3636;&#3604;</button>
+      <button class="btn btn-purple" id="import-confirm-btn" style="display:none" onclick="applyImport()">&#9989; &#3609;&#3635;&#3648;&#3586;&#3657;&#3634;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="unsaved-modal">
+  <div class="modal-box" style="max-width:380px;border-top:3px solid var(--red)">
+    <div class="modal-body" style="padding:24px 24px 0;text-align:center">
+      <div style="font-size:34px;margin-bottom:10px">&#9888;&#65039;</div>
+      <div style="font-size:16px;font-weight:800;margin-bottom:8px">&#3629;&#3629;&#3585;&#3650;&#3604;&#3618;&#3652;&#3617;&#3656;&#3610;&#3633;&#3609;&#3607;&#3638;&#3585;?</div>
+      <div style="font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:20px">
+        &#3617;&#3637;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3607;&#3637;&#3656;&#3618;&#3633;&#3591;&#3652;&#3617;&#3656;&#3652;&#3604;&#3657;&#3610;&#3633;&#3609;&#3607;&#3638;&#3585; &#3627;&#3634;&#3585;&#3629;&#3629;&#3585;&#3592;&#3634;&#3585;&#3627;&#3609;&#3657;&#3634;&#3609;&#3637;&#3657;&#3586;&#3657;&#3629;&#3617;&#3641;&#3621;&#3607;&#3633;&#3657;&#3591;&#3627;&#3617;&#3604;&#3592;&#3632;&#3627;&#3634;&#3618;&#3652;&#3611;
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:center;padding-bottom:24px">
+      <button class="btn btn-ghost" onclick="closeModal('unsaved-modal')">&#8617; &#3629;&#3618;&#3641;&#3656;&#3605;&#3656;&#3629;</button>
+      <button class="btn" style="background:linear-gradient(135deg,var(--red),#BE123C);color:#fff" onclick="confirmUnsavedLeave()">&#3629;&#3629;&#3585;&#3650;&#3604;&#3618;&#3652;&#3617;&#3656;&#3610;&#3633;&#3609;&#3607;&#3638;&#3585;</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase Web SDK — loaded last so it never blocks page render -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
