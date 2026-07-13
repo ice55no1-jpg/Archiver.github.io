@@ -26,13 +26,14 @@
 
 /* ▼▼▼ แก้ค่าด้านล่างนี้ด้วยค่าจาก Firebase Console ▼▼▼ */
 var FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey: "AIzaSyCYnxKyWVWVEwtYbL2f4QbQgEHGO0Vxr5M",
+  authDomain: "workforce-manager-14c7a.firebaseapp.com",
+  databaseURL: "https://workforce-manager-14c7a-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "workforce-manager-14c7a",
+  storageBucket: "workforce-manager-14c7a.firebasestorage.app",
+  messagingSenderId: "622283071544",
+  appId: "1:622283071544:web:f668ff2a2d90fef43d46cd",
+  measurementId: "G-CLZ5R08MB8"
 };
 /* ▲▲▲ แก้แค่นี้เท่านั้น ▲▲▲ */
 
