@@ -25,7 +25,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 /* ▼▼▼ แก้ค่าด้านล่างนี้ด้วยค่าจาก Firebase Console ▼▼▼ */
-var FIREBASE_CONFIG = {
+const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCYnxKyWVWVEwtYbL2f4QbQgEHGO0Vxr5M",
   authDomain: "workforce-manager-14c7a.firebaseapp.com",
   databaseURL: "https://workforce-manager-14c7a-default-rtdb.asia-southeast1.firebasedatabase.app",
